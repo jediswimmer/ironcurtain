@@ -56,7 +56,7 @@ namespace OpenRA.Mods.MCP
 		public override object Create(ActorInitializer init) { return new ExternalBot(this, init); }
 	}
 
-	public sealed class ExternalBot : ITick, IBot, INotifyDamage
+	public sealed class ExternalBot : ITick, IBot, INotifyDamage, INotifyActorDisposing
 	{
 		readonly ExternalBotInfo info;
 		readonly World world;
@@ -69,6 +69,7 @@ namespace OpenRA.Mods.MCP
 		GameStateSerializer stateSerializer;
 		OrderDeserializer orderDeserializer;
 		int ticksSinceSnapshot;
+		bool notifiedGameOver;
 
 		public bool IsEnabled { get; private set; }
 
@@ -148,20 +149,23 @@ namespace OpenRA.Mods.MCP
 			if (!IsEnabled || self.World.IsLoadingGameSave)
 				return;
 
-			Sync.RunUnsynced(Game.Settings.Debug.SyncCheckBotModuleCode, world, () =>
+			using (new PerfSample("mcp_bot_damage"))
 			{
-				pendingEvents.Add(new GameEvent
+				Sync.RunUnsynced(Game.Settings.Debug.SyncCheckBotModuleCode, world, () =>
 				{
-					Type = "under_attack",
-					ActorId = self.ActorID,
-					ActorType = self.Info.Name,
-					AttackerType = e.Attacker?.Info.Name,
-					PositionX = self.Location.X,
-					PositionY = self.Location.Y,
-					Damage = e.Damage.Value,
-					Tick = world.WorldTick
+					pendingEvents.Add(new GameEvent
+					{
+						Type = "under_attack",
+						ActorId = self.ActorID,
+						ActorType = self.Info.Name,
+						AttackerType = e.Attacker?.Info.Name,
+						PositionX = self.Location.X,
+						PositionY = self.Location.Y,
+						Damage = e.Damage.Value,
+						Tick = world.WorldTick
+					});
 				});
-			});
+			}
 		}
 
 		void ProcessMessage(string clientId, IpcMessage msg)
@@ -276,6 +280,21 @@ namespace OpenRA.Mods.MCP
 			if (!ipcServer.HasClients)
 				return;
 
+			// Notify game over once
+			if (world.IsGameOver && !notifiedGameOver)
+			{
+				notifiedGameOver = true;
+				ipcServer.BroadcastEvent("game_over", new
+				{
+					tick = world.WorldTick,
+					winner = world.Players
+						.Where(p => !p.NonCombatant && p.WinState == WinState.Won)
+						.Select(p => p.ResolvedPlayerName)
+						.FirstOrDefault(),
+					self_won = player.WinState == WinState.Won
+				});
+			}
+
 			var update = new
 			{
 				tick = world.WorldTick,
@@ -286,6 +305,16 @@ namespace OpenRA.Mods.MCP
 
 			ipcServer.BroadcastEvent("state_update", update);
 			pendingEvents.Clear();
+		}
+
+		void INotifyActorDisposing.Disposing(Actor self)
+		{
+			if (ipcServer != null)
+			{
+				Log.Write("mcp", "ExternalBot: Disposing IPC server");
+				ipcServer.Dispose();
+				ipcServer = null;
+			}
 		}
 	}
 }
