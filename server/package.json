@@ -1,0 +1,20 @@
+{
+  "name": "iron-curtain-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for AI-controlled Red Alert gameplay via OpenRA",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "tsx": "^4.7.0",
+    "@types/node": "^20.0.0"
+  }
+}

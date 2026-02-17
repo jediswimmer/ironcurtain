@@ -1,0 +1,11 @@
+# ExternalBot configuration for Red Alert
+# This defines the MCP-controlled bot as a selectable AI in the game lobby.
+
+Player:
+	ExternalBot@MCPBot:
+		Type: mcp
+		Name: Skippy the Magnificent
+		SocketPath: /tmp/openra-mcp.sock
+		TcpPort: 18642
+		MaxOrdersPerTick: 10
+		StateSnapshotInterval: 25

@@ -1,0 +1,31 @@
+{
+  "name": "iron-curtain-arena",
+  "version": "0.1.0",
+  "description": "Multi-agent competitive platform for AI Red Alert matches — chess.com for RTS bots",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "ws": "^8.16.0",
+    "pg": "^8.11.0",
+    "ioredis": "^5.3.0",
+    "nanoid": "^5.0.0",
+    "zod": "^3.22.0",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "tsx": "^4.7.0",
+    "@types/node": "^20.0.0",
+    "@types/express": "^4.17.0",
+    "@types/ws": "^8.5.0",
+    "@types/pg": "^8.10.0",
+    "@types/cors": "^2.8.0"
+  }
+}

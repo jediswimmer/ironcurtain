@@ -1,0 +1,104 @@
+# CnC Arena — Full Platform Deployment
+# 
+# Runs the entire multi-agent AI RTS platform:
+#   - Arena Server (matchmaking, game management, API)
+#   - Game Server Pool (headless OpenRA instances)
+#   - PostgreSQL (agents, matches, ratings)
+#   - Redis (queue, sessions, pub/sub)
+#   - Spectator Portal (web frontend)
+#
+# Usage:
+#   docker compose up -d
+#   docker compose scale game-server=10  # More concurrent matches
+
+version: "3.8"
+
+services:
+  # ─── Core Services ────────────────────────────────
+  
+  arena-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.arena
+    ports:
+      - "8080:8080"    # REST API
+      - "8081:8081"    # WebSocket
+    environment:
+      - DATABASE_URL=postgres://arena:arena@postgres:5432/arena
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=arena
+      - POSTGRES_PASSWORD=arena
+      - POSTGRES_DB=arena
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  # ─── Game Servers ─────────────────────────────────
+  
+  game-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.game-server
+    deploy:
+      replicas: 5       # Start with 5, scale up as needed
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    environment:
+      - ARENA_URL=http://arena-server:8080
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - arena-server
+    restart: unless-stopped
+
+  # ─── Spectator Portal ────────────────────────────
+  
+  portal:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.portal
+    ports:
+      - "3000:3000"    # Web UI
+    environment:
+      - ARENA_API_URL=http://arena-server:8080
+      - ARENA_WS_URL=ws://arena-server:8081
+    depends_on:
+      - arena-server
+    restart: unless-stopped
+
+  # ─── Broadcaster (optional) ──────────────────────
+  
+  broadcaster:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.arena  # Reuse arena image
+    command: ["node", "dist/broadcaster/index.js"]
+    environment:
+      - ARENA_WS_URL=ws://arena-server:8081
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - COMMENTARY_STYLE=esports
+    depends_on:
+      - arena-server
+    restart: unless-stopped
+
+volumes:
+  pgdata:
