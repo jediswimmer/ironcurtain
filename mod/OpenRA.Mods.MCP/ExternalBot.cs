@@ -211,11 +211,6 @@ namespace OpenRA.Mods.MCP
 						ipcServer.SendResponse(clientId, msg.Id, techTree);
 						break;
 
-					case "get_settings":
-						var settings = stateSerializer.SerializeGameSettings();
-						ipcServer.SendResponse(clientId, msg.Id, settings);
-						break;
-
 					case "get_map_info":
 						var mapInfo = stateSerializer.SerializeMapInfo();
 						ipcServer.SendResponse(clientId, msg.Id, mapInfo);

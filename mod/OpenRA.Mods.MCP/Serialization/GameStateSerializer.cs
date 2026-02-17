@@ -400,8 +400,8 @@ namespace OpenRA.Mods.MCP.Serialization
 			return new
 			{
 				title = map.Title,
-				width = map.MapSize.X,
-				height = map.MapSize.Y,
+				width = map.MapSize.Width,
+				height = map.MapSize.Height,
 				bounds = new
 				{
 					left = map.Bounds.Left,
