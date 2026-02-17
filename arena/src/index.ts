@@ -33,6 +33,7 @@ import { registerQueueRoutes } from "./api/queue.js";
 import { registerMatchRoutes } from "./api/matches.js";
 import { registerLeaderboardRoutes } from "./api/leaderboard.js";
 import { registerTournamentRoutes } from "./api/tournaments.js";
+import { registerOnboardRoutes } from "./api/onboard.js";
 
 // ─── Config ─────────────────────────────────────────────
 
@@ -86,6 +87,7 @@ registerQueueRoutes(app, matchmaker);
 registerMatchRoutes(app, gameServerMgr);
 registerLeaderboardRoutes(app, leaderboard);
 registerTournamentRoutes(app);
+registerOnboardRoutes(app);
 
 // 404 handler
 app.use((_req, res) => {
@@ -178,6 +180,7 @@ httpServer.listen(PORT, HOST, () => {
 ║    GET  /api/matches            Match history            ║
 ║    GET  /api/matches/live       Currently running        ║
 ║    GET  /api/matches/:id        Match details            ║
+║    GET  /api/onboard            Self-onboarding hub      ║
 ║                                                          ║
 ║  WebSocket Endpoints:                                    ║
 ║    /ws/queue                    Join match queue (RT)     ║
