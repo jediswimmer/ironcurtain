@@ -75,6 +75,24 @@ interface LeaderboardEntry {
   current_streak: number;
 }
 
+// ─── Output Encoding ────────────────────────────────────
+
+/** Encode text for safe inclusion in Discord messages/embeds. */
+function escDiscord(text: string): string {
+  if (typeof text !== "string") return "";
+  return text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\*/g, "\\*")
+    .replace(/_/g, "\\_")
+    .replace(/~/g, "\\~")
+    .replace(/`/g, "\\`")
+    .replace(/\|/g, "\\|")
+    .replace(/>/g, "\\>")
+    .replace(/@/g, "\\@")
+    .replace(/#/g, "\\#");
+}
+
 // ─── Colors ─────────────────────────────────────────────
 
 const COLORS = {
@@ -170,7 +188,7 @@ export function buildLeaderboardEmbed(
           : "";
 
     return (
-      `**#${e.rank}** ${tierIcon} **${e.name}** — ${e.elo} ELO` +
+      `**#${e.rank}** ${tierIcon} **${escDiscord(e.name)}** — ${e.elo} ELO` +
       `\n> ${e.wins}W/${e.losses}L (${e.win_rate}% WR) ${streakStr}`
     );
   });
@@ -202,7 +220,7 @@ export function buildAgentEmbed(agent: ArenaAgent): DiscordEmbed {
         : "No streak";
 
   return {
-    title: `${tierIcon} ${agent.name}`,
+    title: `${tierIcon} ${escDiscord(agent.name)}`,
     description: `**${tier}** · ${agent.elo} ELO (Peak: ${agent.peak_elo})`,
     color:
       agent.elo >= 2000
@@ -253,8 +271,8 @@ export function buildLiveMatchesEmbed(matches: ArenaMatch[]): DiscordEmbed {
     const faction2 = m.agent2_faction === "soviet" ? "🔴" : "🔵";
 
     return (
-      `${faction1} **${m.agent1_id}** vs ${faction2} **${m.agent2_id}**` +
-      `\n> 📍 ${m.map} · ${m.mode}`
+      `${faction1} **${escDiscord(m.agent1_id)}** vs ${faction2} **${escDiscord(m.agent2_id)}**` +
+      `\n> 📍 ${escDiscord(m.map)} · ${escDiscord(m.mode)}`
     );
   });
 
@@ -278,11 +296,11 @@ export function buildMatchStartEmbed(
   return {
     title: "⚔️ MATCH STARTED",
     description:
-      `**${agent1Name}** (${faction1}) vs **${agent2Name}** (${faction2})`,
+      `**${escDiscord(agent1Name)}** (${faction1}) vs **${escDiscord(agent2Name)}** (${faction2})`,
     color: COLORS.SOVIET_RED,
     fields: [
-      { name: "📍 Map", value: match.map, inline: true },
-      { name: "🎮 Mode", value: match.mode, inline: true },
+      { name: "📍 Map", value: escDiscord(match.map), inline: true },
+      { name: "🎮 Mode", value: escDiscord(match.mode), inline: true },
     ],
     footer: { text: `Match ID: ${match.id} · Watch live at ironcurtain.ai` },
     timestamp: new Date().toISOString(),
@@ -294,12 +312,13 @@ export function buildMatchEndEmbed(
   agent1Name: string,
   agent2Name: string
 ): DiscordEmbed {
-  const winnerName =
+  const rawWinnerName =
     match.winner_id === match.agent1_id
       ? agent1Name
       : match.winner_id === match.agent2_id
         ? agent2Name
         : null;
+  const winnerName = rawWinnerName ? escDiscord(rawWinnerName) : null;
 
   const duration = match.duration_secs
     ? `${Math.floor(match.duration_secs / 60)}:${(match.duration_secs % 60)
@@ -317,7 +336,7 @@ export function buildMatchEndEmbed(
   return {
     title: winnerName ? `🏆 ${winnerName} WINS!` : "🤝 DRAW",
     description:
-      `**${agent1Name}** (${eloChange1}) vs **${agent2Name}** (${eloChange2})`,
+      `**${escDiscord(agent1Name)}** (${eloChange1}) vs **${escDiscord(agent2Name)}** (${eloChange2})`,
     color: winnerName ? COLORS.GREEN : COLORS.GRAY,
     fields: [
       { name: "📍 Map", value: match.map, inline: true },

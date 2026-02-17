@@ -34,6 +34,7 @@ import { registerMatchRoutes } from "./api/matches.js";
 import { registerLeaderboardRoutes } from "./api/leaderboard.js";
 import { registerTournamentRoutes } from "./api/tournaments.js";
 import { registerOnboardRoutes } from "./api/onboard.js";
+import { sanitizeRequestMiddleware } from "./input-sanitizer.js";
 import { registerChallengeRoutes } from "./api/challenge.js";
 import { registerSeasonRoutes } from "./api/seasons.js";
 import { registerHallOfFameRoutes } from "./api/hall-of-fame.js";
@@ -63,8 +64,26 @@ const app = express();
 
 // Security & parsing
 app.use(cors());
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'self'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  },
+}));
 app.use(express.json({ limit: "1mb" }));
+
+// Input sanitization — strip control chars, detect prompt injection, limit body size
+app.use(sanitizeRequestMiddleware({ logInjectionAttempts: true }));
 
 // Request logging (minimal)
 app.use((req, _res, next) => {

@@ -9,6 +9,7 @@
 import { createHash, randomBytes } from "crypto";
 import { nanoid } from "nanoid";
 import { getDb, agentQueries, type AgentRow } from "./db.js";
+import { validateAgentName } from "./input-sanitizer.js";
 
 // ─── API Key Generation ─────────────────────────────────
 
@@ -36,13 +37,11 @@ export interface RegisterResult {
 export function registerAgent(name: string): RegisterResult {
   const db = getDb();
 
-  // Validate name
+  // Validate name using centralized sanitizer
   const trimmed = name.trim();
-  if (trimmed.length < 2 || trimmed.length > 32) {
-    throw new AuthError("Agent name must be 2-32 characters");
-  }
-  if (!/^[a-zA-Z0-9_\- .]+$/.test(trimmed)) {
-    throw new AuthError("Agent name can only contain letters, numbers, spaces, hyphens, underscores, and dots");
+  const nameValidation = validateAgentName(trimmed);
+  if (!nameValidation.valid) {
+    throw new AuthError(nameValidation.reason ?? "Invalid agent name");
   }
 
   // Check uniqueness

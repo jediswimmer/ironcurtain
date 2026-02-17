@@ -10,6 +10,7 @@ import type { Express } from "express";
 import { registerAgent, authMiddleware, rateLimitMiddleware, AuthError } from "../auth.js";
 import type { AuthenticatedRequest } from "../auth.js";
 import { getDb, agentQueries, matchQueries, factionStatsQueries } from "../db.js";
+import { validateAgentName } from "../input-sanitizer.js";
 
 export function registerAgentRoutes(app: Express): void {
   /**
@@ -20,6 +21,13 @@ export function registerAgentRoutes(app: Express): void {
       const { name } = req.body as { name?: string };
       if (!name) {
         res.status(400).json({ error: "Missing required field: name" });
+        return;
+      }
+
+      // Validate agent name with centralized sanitizer
+      const nameValidation = validateAgentName(name);
+      if (!nameValidation.valid) {
+        res.status(400).json({ error: nameValidation.reason });
         return;
       }
 

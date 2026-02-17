@@ -29,6 +29,7 @@ import {
 } from "./fog-enforcer.js";
 import { validateApiKey } from "./auth.js";
 import type { AgentRow } from "./db.js";
+import { sanitizeChatMessage, stripControlChars } from "./input-sanitizer.js";
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -518,10 +519,13 @@ export class AgentWebSocketProxy {
     message: string
   ): void {
     const proxy = match.agents.get(agentId);
+    // Sanitize chat message — strip control chars, prompt injection, limit length
+    const sanitizedMessage = sanitizeChatMessage(message);
+    if (!sanitizedMessage) return; // Don't broadcast empty messages
     const chatMsg = JSON.stringify({
       type: "chat",
-      from: proxy?.agentName ?? agentId,
-      message: message.slice(0, 200), // Cap at 200 chars
+      from: stripControlChars(proxy?.agentName ?? agentId),
+      message: sanitizedMessage,
     });
 
     for (const [, p] of match.agents) {

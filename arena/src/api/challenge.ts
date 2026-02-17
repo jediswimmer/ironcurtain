@@ -11,6 +11,7 @@
 
 import type { Express, Request, Response } from "express";
 import { ChallengeMode, type ChallengeResult } from "../challenge-mode.js";
+import { sanitizeFreeText, stripControlChars } from "../input-sanitizer.js";
 
 const challengeMode = new ChallengeMode();
 
@@ -44,9 +45,13 @@ export function registerChallengeRoutes(app: Express): void {
       return;
     }
 
+    // Sanitize user-supplied names
+    const safeName = sanitizeFreeText(human_name, 64);
+    const safeId = stripControlChars(String(human_id)).slice(0, 64);
+
     const challenge = challengeMode.createChallenge({
-      humanName: human_name,
-      humanId: human_id,
+      humanName: safeName,
+      humanId: safeId,
       targetAgentId: target_agent_id,
       targetEloRange: target_elo_range,
       factionPreference: faction_preference,
