@@ -479,6 +479,18 @@ public class ExternalBot : ITick, IBot
 
 ## 5.1 Tool Specifications
 
+> **⚠️ Implementation Note:** The final MCP tool names differ slightly from this
+> original design spec. See [server/src/tools/](server/src/tools/) for the
+> canonical 20 tools. Key differences:
+>
+> | Design Spec | Implementation | Notes |
+> |-------------|---------------|-------|
+> | `game_start` | *(removed)* | Game lifecycle managed by Arena, not agent |
+> | `map_info` | `get_map` | Renamed for consistency with `get_*` pattern |
+> | `get_minimap` | *(deferred)* | Planned for future implementation |
+> | *(not in spec)* | `game_settings` | Added: match config & player info |
+> | *(not in spec)* | `get_tech_tree` | Added: available tech at current tier |
+
 ### 5.1 Game Management
 
 #### `game_start`
