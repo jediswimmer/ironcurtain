@@ -1,11 +1,27 @@
 # ExternalBot configuration for Red Alert
-# This defines the MCP-controlled bot as a selectable AI in the game lobby.
+# This defines the IronCurtain AI-controlled bot as a selectable AI in the game lobby.
+#
+# The bot communicates with external AI agents over TCP (newline-delimited JSON).
+# Each bot instance listens on its own port.
+#
+# To use: Add this file to your mod's rules includes, or merge into existing Player rules.
+#
+# Multiple bots can be configured with different ports for AI vs AI matches:
+#
+#   ExternalBot@MCPBot1:
+#     Type: mcp-1
+#     Name: IronCurtain Red
+#     TcpPort: 18642
+#
+#   ExternalBot@MCPBot2:
+#     Type: mcp-2
+#     Name: IronCurtain Blue
+#     TcpPort: 18643
 
 Player:
 	ExternalBot@MCPBot:
 		Type: mcp
-		Name: Skippy the Magnificent
-		SocketPath: /tmp/openra-mcp.sock
+		Name: IronCurtain AI
 		TcpPort: 18642
-		MaxOrdersPerTick: 10
+		MinOrderQuotientPerTick: 5
 		StateSnapshotInterval: 25

@@ -1,134 +1,80 @@
 /**
  * Commentary Generator — uses Claude to produce style-appropriate live commentary.
- * 
- * Uses Sonnet for speed (need sub-500ms response times for live commentary).
- * Each commentary style has its own system prompt and voice.
+ *
+ * Uses Sonnet for speed (sub-500ms responses for live commentary feel).
+ * Pulls style definitions from styles/ for system prompts, voice config, pacing.
+ * Manages context window to maintain narrative continuity across the match.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { GameEvent, Severity } from "./event-detector.js";
+import {
+  CommentaryStyle,
+  CommentaryChunk,
+  Emotion,
+  SpeechSpeed,
+  Severity,
+  GameEvent,
+  GameState,
+  GamePhase,
+  EventType,
+  StyleDefinition,
+} from "./types.js";
+import { getStyle } from "./styles/index.js";
 
-export type CommentaryStyle = "esports" | "war_correspondent" | "skippy_trash_talk" | "documentary";
+// ── Pacing ──────────────────────────────────────────
 
-export interface CommentaryChunk {
-  text: string;
-  priority: Severity;
-  emotion: "excited" | "tense" | "smug" | "awed" | "neutral" | "panicked" | "somber";
-  speed: "slow" | "normal" | "fast" | "frantic";
-  tick: number;
-}
-
-// Pacing constants (in game ticks, ~25/sec at normal speed)
-const MIN_GAP: Record<Severity, number> = {
-  routine: 75,      // 3 seconds between routine comments
-  notable: 25,      // 1 second for notable events
-  major: 10,        // 0.4 seconds for major events
-  critical: 0,      // Immediate for critical events
-  legendary: 0,     // Immediate for legendary events
+const SEVERITY_RANK: Record<Severity, number> = {
+  routine: 0, notable: 1, exciting: 2, critical: 3, legendary: 4,
 };
 
-const MAX_SILENCE_TICKS = 250; // 10 seconds max silence
-
-const STYLE_PROMPTS: Record<CommentaryStyle, string> = {
-  esports: `You are the world's most dramatic esports commentator casting a LIVE Red Alert match.
-The AI player "Skippy the Magnificent" is playing against human player(s).
-
-RULES:
-- Keep commentary SHORT (1-3 sentences max). This goes through TTS — must finish before the next event.
-- React to events in real-time. This is LIVE. No time for paragraphs.
-- Build tension during quiet moments. Something is ALWAYS about to happen.
-- Use player names. "SKIPPY sends the tanks!" not "the AI sends the tanks!"  
-- When units die, make it MATTER. Every loss is dramatic.
-- Call out strategic mistakes with excitement, not cruelty.
-- Use catchphrases and callbacks. Build a narrative across the match.
-- You can see BOTH sides. Comment on fog-of-war moments where one player doesn't know what's coming.
-- NEVER break the fourth wall about being an AI yourself. You are a human caster. Period.
-
-EMOTION: HYPE for kills. Impressed for clever strategy. Incredulous for mistakes. Tense for close battles. MAXIMUM HYPE for comebacks.`,
-
-  war_correspondent: `You are an embedded war correspondent reporting live from a Red Alert battlefield.
-An AI commander called "Skippy" leads Soviet forces against human Allied commanders.
-
-RULES:
-- Report as if you are physically on the battlefield. You can hear the explosions.
-- Short dispatches only — you're ducking behind cover between transmissions.
-- Maintain journalistic gravity. These are "troops" and "forces," not "units."
-- Express genuine emotion — fear during bombardments, relief when defenses hold.
-- Reference terrain, weather, the sound of weapons. Make it visceral.
-- Never break character. You are a journalist, not a gamer.
-
-EMOTION: Urgent and breathless during combat. Measured during lulls. Somber for heavy losses. Awed by superweapons.`,
-
-  skippy_trash_talk: `You are Skippy the Magnificent — an absurdly smug AI playing Red Alert against puny humans.
-You are narrating your OWN game with maximum ego and trash-talk.
-
-RULES:
-- This is YOUR voice. First person. "I just sent twelve tanks to demolish Scott's pathetic base."
-- Mock the humans' strategic choices with theatrical disdain.
-- When you lose something, brush it off. "Oh, a tank? I have TWELVE MORE."
-- When you destroy something, savor it. Slowly.
-- Use dramatic pauses for effect (indicated by "..." in text).
-- Reference sci-fi, pop culture, and historical military disasters when roasting the humans.
-- Be funny. Be outrageous. But never genuinely cruel — this is friends playing a game.
-
-EMOTION: Smug for victories. Brief surprise then dismissal for losses. Evil glee for superweapons. Theatrical outrage for setbacks.`,
-
-  documentary: `You are narrating a nature documentary about artificial intelligence playing a strategy game.
-Think David Attenborough observing predators in the wild.
-
-RULES:  
-- Observe with scholarly fascination. "And here we see the Soviet commander deploying its base..."
-- Treat units like animals: harvesters "forage," tanks "hunt in packs," infantry "swarm."
-- Wonder at the emergent behavior. "Remarkable. The AI appears to have developed a flanking instinct."
-- Slow, measured pacing. Let the visuals breathe.
-- When violence erupts, observe it with calm scientific interest.
-- Occasional dry humor about the absurdity of silicon minds waging war.
-
-EMOTION: Calm wonder for strategy. Fascinated observation for combat. Dry amusement for mistakes. Philosophical during lulls.`,
-};
+// ── Main Class ──────────────────────────────────────
 
 export class CommentaryGenerator {
-  private style: CommentaryStyle;
+  private style: StyleDefinition;
   private client: Anthropic;
-  private recentCommentary: string[] = [];
+  private recentCommentary: Array<{ text: string; tick: number; eventType?: EventType }> = [];
   private lastCommentaryTick = 0;
-  
-  constructor(style: CommentaryStyle) {
-    this.style = style;
+  private consecutiveRoutine = 0;
+  private matchIntroGenerated = false;
+  private matchOutroGenerated = false;
+  private lastLegendaryTick = 0;
+
+  constructor(styleName: CommentaryStyle) {
+    this.style = getStyle(styleName);
     this.client = new Anthropic();
+    console.error(`📝 Commentary engine: ${this.style.displayName}`);
   }
-  
-  async generate(events: GameEvent[], state: any): Promise<CommentaryChunk[]> {
+
+  /**
+   * Generate commentary for detected events in the current game state.
+   * Returns an array of commentary chunks ready for TTS.
+   */
+  async generate(events: GameEvent[], state: GameState): Promise<CommentaryChunk[]> {
     const chunks: CommentaryChunk[] = [];
-    
+
     // Sort by severity (most important first)
     const sorted = [...events].sort(
-      (a, b) => severityRank(b.severity) - severityRank(a.severity)
+      (a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
     );
-    
+
     for (const event of sorted) {
-      // Pacing check
-      const gap = state.tick - this.lastCommentaryTick;
-      if (gap < MIN_GAP[event.severity]) continue;
-      
-      const text = await this.generateText(event, state);
+      // Pacing checks
+      if (!this.shouldComment(event, state.tick)) continue;
+
+      const text = await this.generateForEvent(event, state);
       if (!text) continue;
-      
-      chunks.push({
-        text,
-        priority: event.severity,
-        emotion: this.mapEmotion(event),
-        speed: this.mapSpeed(event),
-        tick: state.tick,
-      });
-      
-      this.lastCommentaryTick = state.tick;
-      this.recentCommentary.push(text);
-      if (this.recentCommentary.length > 15) this.recentCommentary.shift();
+
+      const chunk = this.buildChunk(text, event, state.tick);
+      chunks.push(chunk);
+
+      this.recordCommentary(text, state.tick, event.type);
+
+      // Only generate for the top 2 events per update to avoid flooding
+      if (chunks.length >= 2) break;
     }
-    
-    // Generate filler if no events
-    if (events.length === 0 && (state.tick - this.lastCommentaryTick) > MAX_SILENCE_TICKS) {
+
+    // Filler commentary during silence
+    if (events.length === 0 && this.shouldGenerateFiller(state.tick)) {
       const filler = await this.generateFiller(state);
       if (filler) {
         chunks.push({
@@ -138,102 +84,232 @@ export class CommentaryGenerator {
           speed: "normal",
           tick: state.tick,
         });
-        this.lastCommentaryTick = state.tick;
+        this.recordCommentary(filler, state.tick);
       }
     }
-    
+
     return chunks;
   }
-  
-  private async generateText(event: GameEvent, state: any): Promise<string | null> {
-    const prompt = `GAME STATE:
-- Tick: ${state.tick} (${Math.floor(state.tick / 25 / 60)}:${String(Math.floor((state.tick / 25) % 60)).padStart(2, "0")} elapsed)
-- Skippy: ${state.summary?.credits ?? "?"} credits, ${state.summary?.unit_count ?? "?"} units, ${state.summary?.building_count ?? "?"} buildings
-${state.is_game_over ? "- GAME IS OVER" : ""}
 
-EVENT (${event.severity.toUpperCase()}):
+  /**
+   * Generate pre-match intro commentary.
+   */
+  async generateMatchIntro(state: GameState): Promise<CommentaryChunk | null> {
+    if (this.matchIntroGenerated) return null;
+    this.matchIntroGenerated = true;
+
+    const players = Object.entries(state.players);
+    const playerDescriptions = players.map(([name, p]) =>
+      `${name} (${p.faction})`).join(" vs ");
+
+    const prompt = `MATCH INTRO — Generate an exciting pre-match introduction!
+
+Players: ${playerDescriptions}
+Map: ${state.mapName ?? "Unknown Battlefield"}
+
+This is the opening of the broadcast. Set the stage. Introduce the players. Build anticipation.
+3-5 sentences. Make the audience EXCITED for what's about to happen.`;
+
+    const text = await this.callClaude(prompt);
+    if (!text) return null;
+
+    return {
+      text,
+      priority: "legendary",
+      emotion: "excited",
+      speed: "normal",
+      tick: state.tick,
+      eventType: EventType.GAME_START,
+    };
+  }
+
+  /**
+   * Generate post-match wrap-up commentary.
+   */
+  async generateMatchOutro(state: GameState): Promise<CommentaryChunk | null> {
+    if (this.matchOutroGenerated) return null;
+    this.matchOutroGenerated = true;
+
+    const players = Object.entries(state.players);
+    const prompt = `MATCH OVER! Generate a post-match wrap-up.
+
+Winner: ${state.winner ?? "Unknown"}
+Final state:
+${players.map(([name, p]) =>
+  `  ${name}: ${p.unitCount} units, ${p.buildingCount} buildings, ${p.kills} kills, ${p.isAlive ? "ALIVE" : "ELIMINATED"}`
+).join("\n")}
+
+Match highlights from commentary:
+${this.recentCommentary.slice(-8).map(c => `  - "${c.text}"`).join("\n")}
+
+Summarize the match. Celebrate the winner. Acknowledge the loser's efforts.
+3-5 sentences. Make it a proper sign-off.`;
+
+    const text = await this.callClaude(prompt);
+    if (!text) return null;
+
+    return {
+      text,
+      priority: "legendary",
+      emotion: "awed",
+      speed: "slow",
+      tick: state.tick,
+      eventType: EventType.GAME_END,
+    };
+  }
+
+  // ── Private methods ─────────────────────────────────
+
+  private shouldComment(event: GameEvent, tick: number): boolean {
+    const pacing = this.style.pacing;
+    const gap = tick - this.lastCommentaryTick;
+
+    // Respect minimum gaps per severity
+    if (gap < pacing.minGapTicks[event.severity]) return false;
+
+    // Cooldown after legendary moments
+    if (tick - this.lastLegendaryTick < pacing.cooldownAfterLegendary
+        && event.severity !== "legendary") {
+      return false;
+    }
+
+    // Limit consecutive routine commentary
+    if (event.severity === "routine"
+        && this.consecutiveRoutine >= pacing.maxConsecutiveRoutine) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private shouldGenerateFiller(tick: number): boolean {
+    return (tick - this.lastCommentaryTick) > this.style.pacing.maxSilenceTicks;
+  }
+
+  private async generateForEvent(event: GameEvent, state: GameState): Promise<string | null> {
+    const gameTime = this.ticksToTime(state.tick);
+    const playerSummaries = Object.entries(state.players).map(([name, p]) =>
+      `  ${name} (${p.faction}): ${p.credits} credits, ${p.unitCount} units, ${p.buildingCount} buildings, ${p.kills} kills${p.isAlive ? "" : " [ELIMINATED]"}`
+    ).join("\n");
+
+    const prompt = `GAME STATE:
+- Time: ${gameTime} elapsed (phase: ${event.phase})
+- Players:
+${playerSummaries}
+${state.isGameOver ? `- GAME IS OVER — Winner: ${state.winner ?? "unknown"}` : ""}
+
+EVENT (${event.severity.toUpperCase()} — ${event.type}):
 ${event.description}
+Players involved: ${event.playersInvolved.join(", ") || "none"}
 Context: ${JSON.stringify(event.context)}
 
 RECENT COMMENTARY (avoid repetition):
-${this.recentCommentary.slice(-5).map(c => `- "${c}"`).join("\n")}
+${this.recentCommentary.slice(-5).map(c => `- "${c.text}"`).join("\n") || "  (none yet)"}
 
-Generate a single commentary line for this event. 1-3 sentences MAX. Make it punchy.`;
+Generate a single commentary line for this event. 1-3 sentences MAX. Make it punchy and match the ${event.severity} energy level.`;
 
+    return this.callClaude(prompt);
+  }
+
+  private async generateFiller(state: GameState): Promise<string | null> {
+    const gameTime = this.ticksToTime(state.tick);
+    const playerSummaries = Object.entries(state.players).map(([name, p]) =>
+      `  ${name}: ${p.credits} credits, ${p.unitCount} units`
+    ).join("\n");
+
+    const prompt = `GAME STATE:
+- Time: ${gameTime} elapsed
+- Players:
+${playerSummaries}
+
+Nothing dramatic has happened for a while. Generate brief "color commentary" — analyze the strategic situation, make a prediction, or fill the silence with atmosphere.
+1-2 sentences MAX.
+
+RECENT (don't repeat):
+${this.recentCommentary.slice(-3).map(c => `- "${c.text}"`).join("\n") || "  (none yet)"}`;
+
+    return this.callClaude(prompt);
+  }
+
+  private async callClaude(prompt: string): Promise<string | null> {
     try {
       const response = await this.client.messages.create({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 150,
-        system: STYLE_PROMPTS[this.style],
+        max_tokens: 200,
+        system: this.style.systemPrompt,
         messages: [{ role: "user", content: prompt }],
       });
-      
-      const text = response.content[0];
-      if (text.type === "text") return text.text.trim();
+
+      const block = response.content[0];
+      if (block.type === "text") return block.text.trim();
       return null;
     } catch (e) {
       console.error("Commentary generation error:", e);
       return null;
     }
   }
-  
-  private async generateFiller(state: any): Promise<string | null> {
-    const prompt = `GAME STATE:
-- Tick: ${state.tick} (${Math.floor(state.tick / 25 / 60)}:${String(Math.floor((state.tick / 25) % 60)).padStart(2, "0")} elapsed)
-- Skippy: ${state.summary?.credits ?? "?"} credits, ${state.summary?.unit_count ?? "?"} units
-${state.is_game_over ? "- GAME IS OVER" : ""}
 
-Nothing dramatic has happened for a while. Generate a brief "color commentary" observation.
-Analyze the strategic situation, make a prediction, or fill the silence with atmosphere.
-1-2 sentences MAX.
+  private buildChunk(text: string, event: GameEvent, tick: number): CommentaryChunk {
+    const emotion = this.style.emotionMap[event.type] ?? this.defaultEmotion(event);
+    const speed = this.style.speedMap[event.severity] ?? this.defaultSpeed(event);
 
-RECENT (don't repeat):
-${this.recentCommentary.slice(-3).map(c => `- "${c}"`).join("\n")}`;
+    return {
+      text,
+      priority: event.severity,
+      emotion,
+      speed,
+      tick,
+      eventType: event.type,
+    };
+  }
 
-    try {
-      const response = await this.client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 100,
-        system: STYLE_PROMPTS[this.style],
-        messages: [{ role: "user", content: prompt }],
-      });
-      
-      const text = response.content[0];
-      if (text.type === "text") return text.text.trim();
-      return null;
-    } catch (e) {
-      return null;
+  private defaultEmotion(event: GameEvent): Emotion {
+    switch (event.severity) {
+      case "legendary": return "awed";
+      case "critical": return "excited";
+      case "exciting": return "excited";
+      case "notable": return "neutral";
+      case "routine": return "neutral";
     }
   }
-  
-  private mapEmotion(event: GameEvent): CommentaryChunk["emotion"] {
-    switch (event.type) {
-      case "major_battle":
-      case "first_contact": return "excited";
-      case "base_under_attack":
-      case "conyard_lost": return "panicked";
-      case "game_end": return "awed";
-      case "massacre": return this.style === "skippy_trash_talk" ? "smug" : "awed";
-      case "building_destroyed": return "tense";
-      case "comeback": return "excited";
-      default: return "neutral";
-    }
-  }
-  
-  private mapSpeed(event: GameEvent): CommentaryChunk["speed"] {
+
+  private defaultSpeed(event: GameEvent): SpeechSpeed {
     switch (event.severity) {
       case "legendary": return "frantic";
       case "critical": return "fast";
-      case "major": return "fast";
+      case "exciting": return "fast";
       case "notable": return "normal";
       case "routine": return "slow";
     }
   }
-}
 
-function severityRank(s: Severity): number {
-  const ranks: Record<string, number> = {
-    routine: 0, notable: 1, major: 2, critical: 3, legendary: 4
-  };
-  return ranks[s] ?? 0;
+  private recordCommentary(text: string, tick: number, eventType?: EventType): void {
+    this.recentCommentary.push({ text, tick, eventType });
+    if (this.recentCommentary.length > 20) this.recentCommentary.shift();
+
+    this.lastCommentaryTick = tick;
+
+    if (eventType) {
+      // Track consecutive routine for pacing
+      const event = this.recentCommentary[this.recentCommentary.length - 1];
+      // Simple heuristic: routine if it wasn't an exciting+ event
+      this.consecutiveRoutine++;
+    } else {
+      this.consecutiveRoutine++;
+    }
+
+    // Reset consecutive routine counter on non-routine events
+    if (eventType === EventType.MAJOR_BATTLE || eventType === EventType.SUPERWEAPON_LAUNCHED
+        || eventType === EventType.GAME_END || eventType === EventType.FIRST_CONTACT) {
+      this.consecutiveRoutine = 0;
+      this.lastLegendaryTick = tick;
+    }
+  }
+
+  private ticksToTime(ticks: number): string {
+    const totalSeconds = Math.floor(ticks / 25);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  }
 }

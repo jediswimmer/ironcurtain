@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * IronCurtain
- * 
- * Bridges Claude's MCP tool calls to the OpenRA ExternalBot via IPC.
- * 
+ * IronCurtain MCP Server
+ *
+ * The bridge between any MCP-compatible AI agent (OpenClaw, Claude, etc.)
+ * and the OpenRA game engine. Exposes game commands as MCP tools, translates
+ * them to IPC messages, and sends them to the OpenRA ExternalBot mod.
+ *
  * Architecture:
- *   Claude (OpenClaw) → MCP Server (this) → Unix Socket → ExternalBot (OpenRA mod)
+ *   AI Agent → MCP (stdio) → This Server → TCP/Unix Socket → ExternalBot (OpenRA)
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -15,16 +17,20 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { config } from "./config.js";
 import { IpcClient } from "./ipc/client.js";
 import { registerGameManagementTools } from "./tools/game-management.js";
 import { registerIntelligenceTools } from "./tools/intelligence.js";
 import { registerOrderTools } from "./tools/orders.js";
 import { registerStrategyTools } from "./tools/strategy.js";
+import type { ToolMap, ToolDefinition } from "./types.js";
+
+// ─── Server Setup ────────────────────────────────────────────────────────────
 
 const server = new Server(
   {
-    name: "iron-curtain-mcp",
-    version: "0.1.0",
+    name: config.serverName,
+    version: config.serverVersion,
   },
   {
     capabilities: {
@@ -33,39 +39,63 @@ const server = new Server(
   }
 );
 
-// IPC client connects to ExternalBot inside OpenRA
-const ipcClient = new IpcClient("/tmp/openra-mcp.sock", 18642);
+// ─── IPC Client ──────────────────────────────────────────────────────────────
 
-// Tool definitions
-const tools: Map<string, {
-  description: string;
-  inputSchema: object;
-  handler: (args: Record<string, unknown>) => Promise<unknown>;
-}> = new Map();
+const ipcClient = new IpcClient(config);
 
-// Register all tool categories
+ipcClient.on("connected", () => {
+  console.error("[IronCurtain] Connected to OpenRA ExternalBot");
+});
+
+ipcClient.on("disconnected", () => {
+  console.error("[IronCurtain] Disconnected from OpenRA ExternalBot");
+});
+
+ipcClient.on("reconnected", () => {
+  console.error("[IronCurtain] Reconnected to OpenRA ExternalBot");
+});
+
+ipcClient.on("reconnect_failed", () => {
+  console.error("[IronCurtain] Failed to reconnect after maximum attempts");
+});
+
+ipcClient.on("game_event", (event: { event: string; data: Record<string, unknown> }) => {
+  console.error(`[IronCurtain] Game event: ${event.event}`);
+});
+
+// ─── Tool Registry ───────────────────────────────────────────────────────────
+
+const tools: ToolMap = new Map();
+
 registerGameManagementTools(tools, ipcClient);
 registerIntelligenceTools(tools, ipcClient);
 registerOrderTools(tools, ipcClient);
 registerStrategyTools(tools, ipcClient);
 
-// List available tools
+console.error(`[IronCurtain] Registered ${tools.size} tools`);
+
+// ─── MCP Handlers ────────────────────────────────────────────────────────────
+
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: Array.from(tools.entries()).map(([name, tool]) => ({
     name,
     description: tool.description,
-    inputSchema: tool.inputSchema as any,
+    inputSchema: tool.inputSchema,
   })),
 }));
 
-// Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  const tool = tools.get(name);
+  const tool: ToolDefinition | undefined = tools.get(name);
 
   if (!tool) {
     return {
-      content: [{ type: "text" as const, text: `Unknown tool: ${name}` }],
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ error: `Unknown tool: ${name}`, available_tools: Array.from(tools.keys()) }),
+        },
+      ],
       isError: true,
     };
   }
@@ -80,12 +110,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         },
       ],
     };
-  } catch (error) {
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : String(error);
+
+    // Provide helpful context for common errors
+    let hint = "";
+    if (message.includes("Not connected")) {
+      hint =
+        " Hint: The OpenRA game may not be running yet. Start a game with the ExternalBot selected.";
+    } else if (message.includes("timed out")) {
+      hint =
+        " Hint: The ExternalBot may be unresponsive. Check if the game is still running.";
+    }
+
     return {
       content: [
         {
           type: "text" as const,
-          text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          text: JSON.stringify({ error: message + hint, tool: name }),
         },
       ],
       isError: true,
@@ -93,19 +136,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// Start server
-async function main() {
+// ─── Startup ─────────────────────────────────────────────────────────────────
+
+async function main(): Promise<void> {
+  // Start MCP server on stdio
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("IronCurtain Server started — awaiting tool calls from Claude");
-  
-  // Connect to OpenRA ExternalBot
+  console.error("[IronCurtain] MCP server started on stdio — awaiting tool calls");
+
+  // Attempt IPC connection (non-blocking — game may not be running yet)
   try {
     await ipcClient.connect();
-    console.error("Connected to OpenRA ExternalBot via IPC");
   } catch {
-    console.error("Warning: Could not connect to OpenRA ExternalBot. Game may not be running yet.");
+    console.error(
+      "[IronCurtain] Could not connect to ExternalBot — game not running yet. Will auto-reconnect when available."
+    );
   }
+
+  // Graceful shutdown
+  const shutdown = (): void => {
+    console.error("[IronCurtain] Shutting down...");
+    ipcClient.disconnect();
+    process.exit(0);
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
-main().catch(console.error);
+main().catch((err: unknown) => {
+  console.error("[IronCurtain] Fatal error:", err);
+  process.exit(1);
+});

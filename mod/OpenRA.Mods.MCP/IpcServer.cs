@@ -1,8 +1,16 @@
-// IPC Server for ExternalBot — handles Unix socket / TCP communication
-// with the MCP server process.
+// TCP IPC Server for ExternalBot — handles communication with external AI agents.
 //
-// Protocol: Newline-delimited JSON over Unix socket or TCP.
+// Protocol: Newline-delimited JSON over TCP.
 // Each message is a single line of JSON followed by \n.
+//
+// The server tracks individual clients and routes responses to the correct sender.
+
+#region Copyright & License Information
+/*
+ * Copyright (c) IronCurtain Contributors
+ * Licensed under the MIT License. See LICENSE for details.
+ */
+#endregion
 
 using System;
 using System.Collections.Concurrent;
@@ -16,27 +24,44 @@ using OpenRA.Mods.MCP.Protocol;
 
 namespace OpenRA.Mods.MCP
 {
+	/// <summary>
+	/// Wrapper that pairs a client ID with an incoming IPC message.
+	/// </summary>
+	public sealed class IpcClientMessage
+	{
+		public string ClientId;
+		public IpcMessage Message;
+	}
+
 	public sealed class IpcServer : IDisposable
 	{
-		readonly string socketPath;
 		readonly int tcpPort;
-		readonly ConcurrentBag<StreamWriter> clients = new();
+
+		/// <summary>
+		/// Connected clients indexed by unique client ID.
+		/// </summary>
+		readonly ConcurrentDictionary<string, StreamWriter> clients = new();
+
 		readonly JsonSerializerOptions jsonOptions = new()
 		{
 			PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
 			WriteIndented = false
 		};
 
-		Socket listener;
+		TcpListener listener;
 		Thread acceptThread;
-		bool running;
+		volatile bool running;
+		int clientCounter;
 
-		public event Action<IpcMessage> OnMessage;
+		/// <summary>
+		/// Fired when a client sends a message. Parameters: (clientId, message).
+		/// </summary>
+		public event Action<string, IpcMessage> OnMessage;
+
 		public bool HasClients => !clients.IsEmpty;
 
-		public IpcServer(string socketPath, int tcpPort)
+		public IpcServer(int tcpPort)
 		{
-			this.socketPath = socketPath;
 			this.tcpPort = tcpPort;
 		}
 
@@ -44,26 +69,17 @@ namespace OpenRA.Mods.MCP
 		{
 			running = true;
 
-			// Try Unix socket first, fall back to TCP
-			try
-			{
-				if (File.Exists(socketPath))
-					File.Delete(socketPath);
+			listener = new TcpListener(IPAddress.Any, tcpPort);
+			listener.Start();
 
-				listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-				listener.Bind(new UnixDomainSocketEndPoint(socketPath));
-				listener.Listen(5);
-				Log.Write("mcp", $"IPC: Listening on Unix socket {socketPath}");
-			}
-			catch
-			{
-				listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-				listener.Bind(new IPEndPoint(IPAddress.Loopback, tcpPort));
-				listener.Listen(5);
-				Log.Write("mcp", $"IPC: Listening on TCP port {tcpPort}");
-			}
+			Log.Write("mcp", $"IPC: TCP server listening on port {tcpPort}");
 
-			acceptThread = new Thread(AcceptLoop) { IsBackground = true, Name = "MCP-IPC-Accept" };
+			acceptThread = new Thread(AcceptLoop)
+			{
+				IsBackground = true,
+				Name = "MCP-IPC-Accept"
+			};
+
 			acceptThread.Start();
 		}
 
@@ -73,47 +89,90 @@ namespace OpenRA.Mods.MCP
 			{
 				try
 				{
-					var clientSocket = listener.Accept();
-					var thread = new Thread(() => HandleClient(clientSocket))
+					var tcpClient = listener.AcceptTcpClient();
+					tcpClient.NoDelay = true; // Disable Nagle for low latency
+
+					var clientId = $"client-{Interlocked.Increment(ref clientCounter)}";
+					var thread = new Thread(() => HandleClient(clientId, tcpClient))
 					{
 						IsBackground = true,
-						Name = $"MCP-IPC-Client-{clientSocket.GetHashCode()}"
+						Name = $"MCP-IPC-{clientId}"
 					};
+
 					thread.Start();
 				}
 				catch (SocketException) when (!running)
 				{
 					break;
 				}
+				catch (ObjectDisposedException) when (!running)
+				{
+					break;
+				}
+				catch (Exception ex)
+				{
+					if (running)
+						Log.Write("mcp", $"IPC: Accept error: {ex.Message}");
+				}
 			}
 		}
 
-		void HandleClient(Socket clientSocket)
+		void HandleClient(string clientId, TcpClient tcpClient)
 		{
-			using var stream = new NetworkStream(clientSocket, true);
-			using var reader = new StreamReader(stream, Encoding.UTF8);
-			var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
-			clients.Add(writer);
-
-			Log.Write("mcp", "IPC: Client connected");
+			StreamWriter writer = null;
 
 			try
 			{
-				while (running && clientSocket.Connected)
+				var stream = tcpClient.GetStream();
+				var reader = new StreamReader(stream, Encoding.UTF8);
+				writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+
+				clients.TryAdd(clientId, writer);
+				Log.Write("mcp", $"IPC: Client {clientId} connected from {tcpClient.Client.RemoteEndPoint}");
+
+				// Send welcome message
+				var welcome = JsonSerializer.Serialize(new IpcEvent
+				{
+					EventType = "connected",
+					Data = new { client_id = clientId, protocol_version = 1 }
+				}, jsonOptions);
+
+				writer.WriteLine(welcome);
+
+				while (running && tcpClient.Connected)
 				{
 					var line = reader.ReadLine();
 					if (line == null)
-						break;
+						break; // Client disconnected
+
+					if (string.IsNullOrWhiteSpace(line))
+						continue; // Skip empty lines
 
 					try
 					{
 						var msg = JsonSerializer.Deserialize<IpcMessage>(line, jsonOptions);
 						if (msg != null)
-							OnMessage?.Invoke(msg);
+							OnMessage?.Invoke(clientId, msg);
 					}
 					catch (JsonException ex)
 					{
-						Log.Write("mcp", $"IPC: Invalid JSON: {ex.Message}");
+						Log.Write("mcp", $"IPC: Invalid JSON from {clientId}: {ex.Message}");
+
+						// Send error response back
+						try
+						{
+							var errorResponse = JsonSerializer.Serialize(new IpcResponse
+							{
+								Id = -1,
+								Error = $"Invalid JSON: {ex.Message}"
+							}, jsonOptions);
+
+							writer.WriteLine(errorResponse);
+						}
+						catch
+						{
+							break;
+						}
 					}
 				}
 			}
@@ -121,35 +180,73 @@ namespace OpenRA.Mods.MCP
 			{
 				// Client disconnected
 			}
+			catch (Exception ex)
+			{
+				Log.Write("mcp", $"IPC: Error with {clientId}: {ex.Message}");
+			}
+			finally
+			{
+				clients.TryRemove(clientId, out _);
+				Log.Write("mcp", $"IPC: Client {clientId} disconnected");
 
-			Log.Write("mcp", "IPC: Client disconnected");
+				try
+				{
+					writer?.Dispose();
+					tcpClient.Dispose();
+				}
+				catch
+				{
+					// Best-effort cleanup
+				}
+			}
 		}
 
-		public void SendResponse(int id, object result)
+		/// <summary>
+		/// Send a response to a specific client.
+		/// </summary>
+		public void SendResponse(string clientId, int requestId, object result)
 		{
-			var response = new IpcResponse { Id = id, Result = result };
+			if (!clients.TryGetValue(clientId, out var writer))
+				return;
+
+			var response = new IpcResponse { Id = requestId, Result = result };
 			var json = JsonSerializer.Serialize(response, jsonOptions);
-			BroadcastLine(json);
+
+			try
+			{
+				lock (writer)
+				{
+					writer.WriteLine(json);
+				}
+			}
+			catch (Exception ex)
+			{
+				Log.Write("mcp", $"IPC: Failed to send response to {clientId}: {ex.Message}");
+				clients.TryRemove(clientId, out _);
+			}
 		}
 
+		/// <summary>
+		/// Broadcast an event to all connected clients.
+		/// </summary>
 		public void BroadcastEvent(string eventType, object data)
 		{
 			var evt = new IpcEvent { EventType = eventType, Data = data };
 			var json = JsonSerializer.Serialize(evt, jsonOptions);
-			BroadcastLine(json);
-		}
 
-		void BroadcastLine(string json)
-		{
-			foreach (var writer in clients)
+			foreach (var kvp in clients)
 			{
 				try
 				{
-					writer.WriteLine(json);
+					lock (kvp.Value)
+					{
+						kvp.Value.WriteLine(json);
+					}
 				}
 				catch
 				{
-					// Client disconnected, will be cleaned up
+					// Client disconnected — remove it
+					clients.TryRemove(kvp.Key, out _);
 				}
 			}
 		}
@@ -157,11 +254,30 @@ namespace OpenRA.Mods.MCP
 		public void Dispose()
 		{
 			running = false;
-			listener?.Close();
-			listener?.Dispose();
 
-			if (File.Exists(socketPath))
-				File.Delete(socketPath);
+			try
+			{
+				listener?.Stop();
+			}
+			catch
+			{
+				// Best-effort
+			}
+
+			// Close all client connections
+			foreach (var kvp in clients)
+			{
+				try
+				{
+					kvp.Value.Dispose();
+				}
+				catch
+				{
+					// Best-effort
+				}
+			}
+
+			clients.Clear();
 		}
 	}
 }

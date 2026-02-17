@@ -1,70 +1,49 @@
 /**
- * Game Management Tools — game_start, game_status
+ * Game Management Tools
+ *
+ * Tools for game lifecycle and status monitoring.
+ *   - game_status  — Current game state, phase, economy, military summary
+ *   - game_settings — Current match configuration and player info
  */
 
-import { IpcClient } from "../ipc/client.js";
+import { z } from "zod";
+import type { IpcClient } from "../ipc/client.js";
+import type { ToolMap, GameStatus, GameSettings } from "../types.js";
+import { zodToJsonSchema } from "../util/schema.js";
 
-type ToolMap = Map<string, {
-  description: string;
-  inputSchema: object;
-  handler: (args: Record<string, unknown>) => Promise<unknown>;
-}>;
+// ─── Schemas ─────────────────────────────────────────────────────────────────
 
-export function registerGameManagementTools(tools: ToolMap, ipc: IpcClient) {
+const GameStatusInputSchema = z.object({}).strict().describe("No parameters required.");
+
+const GameSettingsInputSchema = z.object({}).strict().describe("No parameters required.");
+
+// ─── Registration ────────────────────────────────────────────────────────────
+
+export function registerGameManagementTools(tools: ToolMap, ipc: IpcClient): void {
   tools.set("game_status", {
-    description:
-      "Get the current game status including phase, elapsed time, credits, unit/building counts, power status, and kill/loss stats.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-    handler: async () => {
-      return await ipc.request("get_state");
+    description: [
+      "Get the current game status including phase (lobby/playing/won/lost),",
+      "elapsed time, our faction, credits, unit and building counts,",
+      "power status (generated vs consumed), and kill/loss statistics.",
+      "Call this frequently to maintain situational awareness.",
+    ].join(" "),
+    inputSchema: zodToJsonSchema(GameStatusInputSchema),
+    async handler(_args: Record<string, unknown>): Promise<GameStatus> {
+      const result = await ipc.request<GameStatus>("get_state");
+      return result;
     },
   });
 
-  tools.set("game_start", {
-    description:
-      "Launch a new OpenRA Red Alert game. Configures map, faction, opponents, and game settings. Returns game details once the match begins.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        map: {
-          type: "string",
-          description: "Map ID or name. Null for random map.",
-        },
-        faction: {
-          type: "string",
-          enum: ["allies", "soviet"],
-          description: "Our faction. Null for random.",
-        },
-        opponents: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              type: { type: "string", enum: ["human", "bot"] },
-              faction: { type: "string", enum: ["allies", "soviet"] },
-              difficulty: { type: "string", enum: ["easy", "normal", "hard"] },
-            },
-          },
-          description: "Opponent configuration.",
-        },
-        game_speed: {
-          type: "string",
-          enum: ["slowest", "slower", "slow", "normal", "fast", "faster", "fastest"],
-          description: "Game speed. Default: normal.",
-        },
-      },
-    },
-    handler: async (args) => {
-      // TODO: Launch OpenRA process with configured settings
-      // For MVP, assume game is already running and we just need to connect
-      return {
-        status: "not_implemented",
-        message:
-          "Game launching will be implemented in Phase 4. For now, start the game manually with the MCP bot selected.",
-      };
+  tools.set("game_settings", {
+    description: [
+      "Get the current match settings: game ID, map name, map size,",
+      "game speed, fog of war/shroud settings, starting cash, tech level,",
+      "and full player list with factions.",
+    ].join(" "),
+    inputSchema: zodToJsonSchema(GameSettingsInputSchema),
+    async handler(_args: Record<string, unknown>): Promise<GameSettings> {
+      const result = await ipc.request<GameSettings>("get_settings");
+      return result;
     },
   });
 }
