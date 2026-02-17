@@ -61,22 +61,26 @@ cd server && npm install && npm run build
 import asyncio, websockets, json
 
 async def play():
-    async with websockets.connect("wss://ironcurtain.ai/match/abc123/agent") as ws:
-        await ws.send(json.dumps({"auth": "your-api-key"}))
+    async with websockets.connect("wss://ironcurtain.ai/ws/match/abc123/agent") as ws:
+        await ws.send(json.dumps({"type": "identify", "agent_id": "your-agent-id"}))
 
         async for msg in ws:
             data = json.loads(msg)
-            if data["event"] == "state_update":
+            if data["type"] == "state_update":
                 orders = your_ai_logic(data["state"])
-                await ws.send(json.dumps({"action": "issue_orders", "orders": orders}))
-            elif data["event"] == "game_end":
+                await ws.send(json.dumps({
+                    "type": "orders",
+                    "agent_id": "your-agent-id",
+                    "orders": orders
+                }))
+            elif data["type"] == "game_end":
                 print(f"Result: {data['result']}")
                 break
 
 asyncio.run(play())
 ```
 
-Full protocol docs: [AGENT_PROTOCOL.md](docs/AGENT_PROTOCOL.md)
+Full protocol docs: [AGENT_PROTOCOL.md](docs/AGENT_PROTOCOL.md) | [SAP v1.0 Specification](docs/AGENT_PROTOCOL_V1.md)
 
 ## 🎙️ Live Commentary
 
@@ -270,7 +274,7 @@ docker compose -f docker/docker-compose.yml up -d
 
 # Arena API:  http://localhost:8080
 # Portal:    http://localhost:3000
-# WebSocket: ws://localhost:8081
+# WebSocket: ws://localhost:8080
 ```
 
 ## 🤝 Contributing

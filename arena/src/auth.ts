@@ -84,6 +84,8 @@ export function validateApiKey(apiKey: string): AgentRow | null {
   return agent;
 }
 
+import type { Request, Response, NextFunction } from "express";
+
 /**
  * Express middleware: extracts agent from Authorization header.
  * Sets req.agent if valid.
@@ -113,8 +115,6 @@ export function authMiddleware(
   (req as unknown as AuthenticatedRequest).agent = agent;
   next();
 }
-
-import type { Request, Response, NextFunction } from "express";
 
 export interface AuthenticatedRequest extends Request {
   agent: AgentRow;

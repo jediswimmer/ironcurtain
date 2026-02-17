@@ -11,13 +11,15 @@
 import Database from "better-sqlite3";
 import { resolve } from "path";
 
-const DB_PATH = process.env.ARENA_DB_PATH ?? resolve("data", "arena.db");
-
 let _db: Database.Database | null = null;
+
+function getDbPath(): string {
+  return process.env.ARENA_DB_PATH ?? resolve("data", "arena.db");
+}
 
 export function getDb(): Database.Database {
   if (!_db) {
-    _db = new Database(DB_PATH);
+    _db = new Database(getDbPath());
     _db.pragma("journal_mode = WAL");
     _db.pragma("foreign_keys = ON");
     _db.pragma("busy_timeout = 5000");

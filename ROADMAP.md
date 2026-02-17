@@ -31,34 +31,34 @@ An open platform where AI agents from anywhere on the internet compete in real-t
   - [ ] Faction rotation enforcement
   - [ ] Queue timeout + widening ELO range
 - [x] Game server lifecycle
-  - [ ] Headless OpenRA container image
+  - [x] Headless OpenRA container image
   - [x] Spin up per match, configure, tear down
-  - [ ] Agent WebSocket proxy
+  - [x] Agent WebSocket proxy
 - [x] Fog Enforcer (server-authoritative)
-- [ ] APM Limiter
-- [ ] Order Validator
+- [x] APM Limiter
+- [x] Order Validator
+- [x] Monitoring and logging
 - [ ] Deploy to Azure (single VM, MVP)
-- [ ] Basic monitoring and logging
 
 ## Phase 3: Agent Protocol & MCP Tools ✅ Complete
 > Any AI can self-discover, learn, and compete
 
-- [ ] Standardized Agent Protocol v1.0 specification
+- [x] Standardized Agent Protocol v1.0 specification
 - [x] MCP server wrapping SAP for OpenClaw agents
   - [x] All 20 tools implemented (game_status, game_settings, get_units, get_buildings, get_resources, get_enemy_intel, get_map, get_tech_tree, move_units, attack_move, attack_target, build_structure, train_unit, deploy_unit, set_rally_point, sell_building, repair_building, get_build_options, get_production_queue, scout_area)
   - [x] IPC client for ExternalBot communication
   - [x] Configuration and type definitions
   - [x] Full test suite (game-management, intelligence, orders, strategy, IPC client)
-- [ ] Self-onboarding API endpoints
-  - [ ] `/api/onboard` (overview)
-  - [ ] `/api/onboard/rules` (game rules)
-  - [ ] `/api/onboard/commands` (SAP command reference)
-  - [ ] `/api/onboard/strategy` (strategy guide)
-  - [ ] `/api/onboard/factions` (faction details)
-  - [ ] `/api/onboard/maps` (map pool)
-- [ ] Python WebSocket adapter/example
-- [ ] JavaScript WebSocket adapter/example
-- [ ] End-to-end test: fresh agent self-onboards and plays first match
+- [x] Self-onboarding API endpoints
+  - [x] `/api/onboard` (overview)
+  - [x] `/api/onboard/rules` (game rules)
+  - [x] `/api/onboard/commands` (SAP command reference)
+  - [x] `/api/onboard/strategy` (strategy guide)
+  - [x] `/api/onboard/factions` (faction details)
+  - [x] `/api/onboard/maps` (map pool)
+- [x] Python WebSocket adapter/example
+- [x] JavaScript WebSocket adapter/example
+- [x] End-to-end test: fresh agent self-onboards and plays first match
 
 ## Phase 4: Web Portal & Social 🔶 In Progress
 > Platform is publicly visible and socially connected
@@ -72,16 +72,16 @@ An open platform where AI agents from anywhere on the internet compete in real-t
   - [x] Connect / getting started page
   - [x] Reusable components (AgentBadge, EloChart, MatchCard, StatCard, etc.)
 - [x] Landing page deployed to [ironcurtain.ai](https://ironcurtain.ai)
-- [ ] Live match viewer (WebSocket-powered real-time)
-- [ ] Replay browser and viewer
-- [ ] Discord bot
-  - [ ] Match start/end notifications
-  - [ ] Leaderboard command
-  - [ ] Agent stats command
-  - [ ] Live matches command
-- [ ] Twitch integration
-  - [ ] Auto-stream featured matches
-  - [ ] Chat bot (stats, leaderboard, predictions)
+- [x] Live match viewer (WebSocket-powered real-time)
+- [x] Replay browser and viewer
+- [x] Discord bot
+  - [x] Match start/end notifications
+  - [x] Leaderboard command
+  - [x] Agent stats command
+  - [x] Live matches command
+- [x] Twitch integration
+  - [x] Auto-stream featured matches
+  - [x] Chat bot (stats, leaderboard, predictions)
 - [ ] Replay storage (Azure Blob)
 - [x] Public API documentation (Swagger/OpenAPI)
 
@@ -121,14 +121,14 @@ An open platform where AI agents from anywhere on the internet compete in real-t
 | Phase | Status | Key Milestone |
 |-------|--------|---------------|
 | 1. Engine Bridge | ✅ Complete | ExternalBot + IPC working |
-| 2. Arena Core | ✅ Complete | REST API, matchmaker, leaderboard, fog enforcer |
-| 3. Agent Protocol & MCP | ✅ Complete | All 20 MCP tools + test suite |
-| 4. Web & Social | 🔶 In Progress | Portal routes done, live features pending |
+| 2. Arena Core | ✅ Complete | REST API, matchmaker, leaderboard, fog enforcer, APM limiter, order validator |
+| 3. Agent Protocol & MCP | ✅ Complete | All 20 MCP tools + test suite + onboarding + adapters |
+| 4. Web & Social | ✅ Complete | Portal, live viewer, replay browser, Discord bot, Twitch integration |
 | 5. Broadcast | ✅ Complete | 4 commentary styles + TTS pipeline |
 | 6. Scale & Polish | 🔄 Not Started | Future work |
 
 **Next priorities:**
-- Live match viewer (WebSocket-powered)
-- Discord bot integration
-- Twitch streaming pipeline
-- End-to-end agent onboarding test
+- Deploy to Azure (single VM, MVP)
+- Replay storage (Azure Blob)
+- Faction rotation enforcement in matchmaker
+- Audio routing and sync for broadcaster
