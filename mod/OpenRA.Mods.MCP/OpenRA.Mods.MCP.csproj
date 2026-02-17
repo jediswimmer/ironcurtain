@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>OpenRA.Mods.MCP</RootNamespace>
+    <AssemblyName>OpenRA.Mods.MCP</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    When building standalone (outside OpenRA solution), set OpenRADir to point
+    to a local OpenRA checkout so project references resolve correctly.
+    Example: dotnet build -p:OpenRADir=/tmp/OpenRA
+  -->
+  <PropertyGroup>
+    <OpenRADir Condition="'$(OpenRADir)' == ''">../../OpenRA</OpenRADir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(OpenRADir)/OpenRA.Game/OpenRA.Game.csproj" />
+    <ProjectReference Include="$(OpenRADir)/OpenRA.Mods.Common/OpenRA.Mods.Common.csproj" />
+  </ItemGroup>
+</Project>

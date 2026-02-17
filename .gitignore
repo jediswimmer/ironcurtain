@@ -46,5 +46,8 @@ docker-compose.override.yml
 *.pem
 *.key
 
+# Broadcaster audio cache
+.audio-cache/
+
 # OpenRA game data (large, download separately)
 /tmp/OpenRA/

@@ -6,6 +6,7 @@
  */
 
 import type { Express } from "express";
+import { getTier } from "../leaderboard.js";
 import type { Leaderboard } from "../leaderboard.js";
 import { getDb, agentQueries } from "../db.js";
 
@@ -28,7 +29,7 @@ export function registerLeaderboardRoutes(app: Express, leaderboard: Leaderboard
         agent_id: a.id,
         name: a.name,
         elo: a.elo,
-        tier: leaderboard.getTier(a.elo),
+        tier: getTier(a.elo),
         games_played: a.games_played,
         wins: a.wins,
         losses: a.losses,

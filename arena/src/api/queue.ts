@@ -9,7 +9,7 @@
 import type { Express } from "express";
 import { authMiddleware, rateLimitMiddleware } from "../auth.js";
 import type { AuthenticatedRequest } from "../auth.js";
-import type { Matchmaker } from "../matchmaker.js";
+import type { Matchmaker, GameMode } from "../matchmaker.js";
 
 export function registerQueueRoutes(app: Express, matchmaker: Matchmaker): void {
   /**
@@ -17,13 +17,12 @@ export function registerQueueRoutes(app: Express, matchmaker: Matchmaker): void 
    */
   app.post("/api/queue/join", authMiddleware, rateLimitMiddleware, (req, res) => {
     const agent = (req as unknown as AuthenticatedRequest).agent;
-    const {
-      mode = "ranked_1v1",
-      faction_preference = "random",
-    } = req.body as {
+    const body = req.body as {
       mode?: string;
-      faction_preference?: "allies" | "soviet" | "random";
+      faction_preference?: string;
     };
+    const mode = (body.mode ?? "ranked_1v1") as GameMode;
+    const faction_preference = (body.faction_preference ?? "random") as "allies" | "soviet" | "random";
 
     try {
       matchmaker.addToQueue({

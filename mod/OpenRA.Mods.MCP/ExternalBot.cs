@@ -201,8 +201,19 @@ namespace OpenRA.Mods.MCP
 						break;
 
 					case "get_production_queues":
+					case "get_production_queue":
 						var queues = stateSerializer.SerializeProductionQueues();
 						ipcServer.SendResponse(clientId, msg.Id, queues);
+						break;
+
+					case "get_tech_tree":
+						var techTree = stateSerializer.SerializeBuildOptions();
+						ipcServer.SendResponse(clientId, msg.Id, techTree);
+						break;
+
+					case "get_settings":
+						var settings = stateSerializer.SerializeGameSettings();
+						ipcServer.SendResponse(clientId, msg.Id, settings);
 						break;
 
 					case "get_map_info":
