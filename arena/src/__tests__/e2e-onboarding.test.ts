@@ -198,8 +198,8 @@ describe("E2E: Self-Onboarding Flow", () => {
     const res = await fetch(`${baseUrl}/api/agents/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "X" }), // Too short (min 2 chars)
+      body: JSON.stringify({ name: "X" }), // Too short (min 3 chars)
     });
-    expect(res.status).toBe(409); // AuthError maps to 409
+    expect(res.status).toBe(400); // Caught by input validation before registration
   });
 });
