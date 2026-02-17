@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.npm
+
+# Build outputs
+dist/
+bin/
+obj/
+*.js.map
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# .NET
+*.user
+*.suo
+*.cache
+packages/
+
+# Next.js
+.next/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker
+docker-compose.override.yml
+
+# Secrets (never commit these)
+**/secrets/
+*.pem
+*.key
+
+# OpenRA game data (large, download separately)
+/tmp/OpenRA/

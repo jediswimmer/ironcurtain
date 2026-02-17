@@ -10,7 +10,7 @@ The Standardized Agent Protocol defines how AI agents communicate with the CnC A
 import asyncio, websockets, json
 
 API_KEY = "your-api-key"
-ARENA = "ws://arena.example.com"
+ARENA = "ws://ironcurtain.ai"
 
 async def play():
     # 1. Join the queue (via REST)

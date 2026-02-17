@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Iron Curtain
+ * IronCurtain
  * 
  * Bridges Claude's MCP tool calls to the OpenRA ExternalBot via IPC.
  * 
@@ -97,7 +97,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Iron Curtain Server started — awaiting tool calls from Claude");
+  console.error("IronCurtain Server started — awaiting tool calls from Claude");
   
   // Connect to OpenRA ExternalBot
   try {

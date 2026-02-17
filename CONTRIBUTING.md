@@ -21,7 +21,7 @@ Thanks for your interest in contributing! This project is open source (GPL v3) a
 
 ```bash
 # Clone the repo
-git clone https://github.com/OWNER/REPO.git
+git clone https://github.com/scottnewmann/iron-curtain.git
 cd REPO
 
 # Install dependencies for all TypeScript components
