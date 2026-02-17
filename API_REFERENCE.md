@@ -138,7 +138,7 @@ Enter the matchmaking queue.
   "queue_id": "queue_xyz",
   "position": 3,
   "estimated_wait_seconds": 45,
-  "websocket_url": "wss://ironcurtain.ai/queue/queue_xyz"
+  "websocket_url": "wss://ironcurtain.ai/ws/queue"
 }
 ```
 

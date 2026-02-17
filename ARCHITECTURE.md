@@ -1100,26 +1100,33 @@ iron-curtain-mod/
 The MCP server uses the official `@modelcontextprotocol/sdk`:
 
 ```
-iron-curtain-server/
+server/
 ├── src/
 │   ├── index.ts                # MCP server entry point
+│   ├── config.ts               # Server configuration
+│   ├── types.ts                # TypeScript type definitions
 │   ├── tools/
-│   │   ├── game-management.ts  # game_start, game_status
-│   │   ├── intelligence.ts     # get_units, get_buildings, etc.
-│   │   ├── orders.ts           # move_units, attack_target, etc.
-│   │   └── strategy.ts         # scout_area, get_build_options
+│   │   ├── game-management.ts  # game_status, game_settings
+│   │   ├── intelligence.ts     # get_units, get_buildings, get_resources,
+│   │   │                       # get_enemy_intel, get_map, get_tech_tree
+│   │   ├── orders.ts           # move_units, attack_move, attack_target,
+│   │   │                       # build_structure, train_unit, deploy_unit,
+│   │   │                       # set_rally_point, sell_building, repair_building
+│   │   └── strategy.ts         # get_build_options, get_production_queue, scout_area
 │   ├── ipc/
-│   │   ├── client.ts           # Unix socket client to ExternalBot
-│   │   └── protocol.ts         # Message serialization
-│   ├── game/
-│   │   ├── launcher.ts         # OpenRA process management
-│   │   ├── state-cache.ts      # Cached game state
-│   │   └── types.ts            # TypeScript type definitions
-│   └── utils/
-│       └── rate-limiter.ts     # Prevent order spam
+│   │   └── client.ts           # Unix socket client to ExternalBot
+│   ├── util/
+│   │   └── schema.ts           # Zod → JSON schema conversion
+│   └── __tests__/              # Full test suite (vitest)
+│       ├── game-management.test.ts
+│       ├── intelligence.test.ts
+│       ├── orders.test.ts
+│       ├── strategy.test.ts
+│       ├── ipc-client.test.ts
+│       └── mock-ipc-server.ts
+├── vitest.config.ts
 ├── package.json
-├── tsconfig.json
-└── README.md
+└── tsconfig.json
 ```
 
 ### 6.3 Broadcaster Agent (TypeScript)
@@ -1127,25 +1134,20 @@ iron-curtain-server/
 The Broadcaster is a standalone process or OpenClaw sub-agent:
 
 ```
-iron-curtain-broadcaster/
+broadcaster/
 ├── src/
 │   ├── index.ts              # Broadcaster entry point
 │   ├── event-detector.ts     # Detects key moments from game state diffs
 │   ├── commentary-gen.ts     # Generates commentary text via LLM
-│   ├── tts-pipeline.ts       # ElevenLabs TTS with priority queuing
-│   ├── audio-router.ts       # Routes audio to virtual device (BlackHole)
+│   ├── tts-pipeline.ts       # TTS with 3 backends (ElevenLabs + more)
 │   ├── overlay-server.ts     # Serves HTML overlays for OBS
-│   ├── styles/
-│   │   ├── esports.ts
-│   │   ├── war-correspondent.ts
-│   │   ├── skippy-trash-talk.ts
-│   │   └── documentary.ts
-│   └── prompts/
-│       └── *.md              # System prompts per style
-├── overlay/
-│   ├── overlay.html          # OBS browser source — stats bar
-│   ├── subtitles.html        # OBS browser source — live subtitles
-│   └── styles.css
+│   ├── types.ts              # Type definitions
+│   └── styles/
+│       ├── index.ts           # Style registry
+│       ├── esports.ts         # 🎙️ Tournament caster
+│       ├── war-correspondent.ts # 📻 Embedded reporter
+│       ├── skippy.ts          # 😈 Trash talk
+│       └── documentary.ts     # 📚 Nature documentary
 ├── package.json
 └── tsconfig.json
 ```
