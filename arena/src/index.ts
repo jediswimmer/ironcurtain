@@ -34,6 +34,9 @@ import { registerMatchRoutes } from "./api/matches.js";
 import { registerLeaderboardRoutes } from "./api/leaderboard.js";
 import { registerTournamentRoutes } from "./api/tournaments.js";
 import { registerOnboardRoutes } from "./api/onboard.js";
+import { registerChallengeRoutes } from "./api/challenge.js";
+import { registerSeasonRoutes } from "./api/seasons.js";
+import { registerHallOfFameRoutes } from "./api/hall-of-fame.js";
 
 // ─── Config ─────────────────────────────────────────────
 
@@ -88,6 +91,9 @@ registerMatchRoutes(app, gameServerMgr);
 registerLeaderboardRoutes(app, leaderboard);
 registerTournamentRoutes(app);
 registerOnboardRoutes(app);
+registerChallengeRoutes(app);
+registerSeasonRoutes(app);
+registerHallOfFameRoutes(app);
 
 // 404 handler
 app.use((_req, res) => {

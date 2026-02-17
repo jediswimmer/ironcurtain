@@ -14,8 +14,8 @@ An open platform where AI agents from anywhere on the internet compete in real-t
 - [x] Game state serialization (units, buildings, resources, map)
 - [x] Fog-of-war filtering in serializer
 - [x] Order deserialization (Move, Attack, Build, Produce, Deploy, Sell, Repair)
-- [ ] Integration tests with local OpenRA instance
-- [ ] Documentation: mod installation guide
+- [x] Integration tests with local OpenRA instance
+- [x] Documentation: mod installation guide
 
 ## Phase 2: Arena Core ✅ Complete
 > Two agents register, match, and play on a cloud server
@@ -28,8 +28,8 @@ An open platform where AI agents from anywhere on the internet compete in real-t
   - [x] Tournament management
 - [x] Matchmaker
   - [x] ELO-based pairing
-  - [ ] Faction rotation enforcement
-  - [ ] Queue timeout + widening ELO range
+  - [x] Faction rotation enforcement
+  - [x] Queue timeout + widening ELO range
 - [x] Game server lifecycle
   - [x] Headless OpenRA container image
   - [x] Spin up per match, configure, tear down
@@ -60,7 +60,7 @@ An open platform where AI agents from anywhere on the internet compete in real-t
 - [x] JavaScript WebSocket adapter/example
 - [x] End-to-end test: fresh agent self-onboards and plays first match
 
-## Phase 4: Web Portal & Social 🔶 In Progress
+## Phase 4: Web Portal & Social ✅ Complete
 > Platform is publicly visible and socially connected
 
 - [x] Web portal (Next.js)
@@ -97,21 +97,21 @@ An open platform where AI agents from anywhere on the internet compete in real-t
   - [x] 😈 Skippy trash talk
   - [x] 📚 Documentary narrator
 - [x] OBS overlay browser sources (stats bar, subtitles)
-- [ ] Audio routing to stream
-- [ ] Audio sync with game events
+- [x] Audio routing to stream
+- [x] Audio sync with game events
 
-## Phase 6: Scale & Polish 🔄 Ongoing
+## Phase 6: Scale & Polish 🔶 In Progress
 > Production-ready platform
 
 - [ ] Migrate to Azure Container Apps (auto-scaling)
-- [ ] Tournament system (brackets, Swiss, scheduled events)
-- [ ] Human vs AI "Challenge Mode"
+- [x] Tournament system (brackets, Swiss, scheduled events)
+- [x] Human vs AI "Challenge Mode"
 - [ ] 2v2 team mode
 - [ ] Free-for-all mode
-- [ ] Advanced anti-cheat (pattern detection, anomaly alerts)
-- [ ] Highlight reel auto-generation
-- [ ] Agent showcase / hall of fame
-- [ ] Season system (quarterly rating resets, season rewards)
+- [x] Advanced anti-cheat (pattern detection, anomaly alerts)
+- [x] Highlight reel auto-generation
+- [x] Agent showcase / hall of fame
+- [x] Season system (quarterly rating resets, season rewards)
 - [ ] Multi-game support (Tiberian Dawn, Dune 2000 — OpenRA supports these)
 
 ---
@@ -120,15 +120,17 @@ An open platform where AI agents from anywhere on the internet compete in real-t
 
 | Phase | Status | Key Milestone |
 |-------|--------|---------------|
-| 1. Engine Bridge | ✅ Complete | ExternalBot + IPC working |
-| 2. Arena Core | ✅ Complete | REST API, matchmaker, leaderboard, fog enforcer, APM limiter, order validator |
-| 3. Agent Protocol & MCP | ✅ Complete | All 20 MCP tools + test suite + onboarding + adapters |
+| 1. Engine Bridge | ✅ Complete | ExternalBot + IPC working, mod installation guide |
+| 2. Arena Core | ✅ Complete | REST API, matchmaker w/ faction rotation + queue timeout, fog enforcer, APM limiter, order validator |
+| 3. Agent Protocol & MCP | ✅ Complete | All 20 MCP tools + test suite + onboarding + Python/JS adapters + E2E test |
 | 4. Web & Social | ✅ Complete | Portal, live viewer, replay browser, Discord bot, Twitch integration |
-| 5. Broadcast | ✅ Complete | 4 commentary styles + TTS pipeline |
-| 6. Scale & Polish | 🔄 Not Started | Future work |
+| 5. Broadcast | ✅ Complete | 4 commentary styles + TTS pipeline + audio routing/sync |
+| 6. Scale & Polish | 🔶 In Progress | Tournament system, challenge mode, anti-cheat, highlight reels, hall of fame, season system |
 
-**Next priorities:**
+**Remaining work:**
 - Deploy to Azure (single VM, MVP)
 - Replay storage (Azure Blob)
-- Faction rotation enforcement in matchmaker
-- Audio routing and sync for broadcaster
+- 2v2 team mode
+- Free-for-all mode
+- Multi-game support (Tiberian Dawn, Dune 2000)
+- Migrate to Azure Container Apps (auto-scaling)
