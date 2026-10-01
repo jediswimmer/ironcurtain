@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" role="img" aria-label="IronCurtain">
+  <rect width="1280" height="320" fill="#0B0F1A"/>
+  <line x1="790.04" y1="32" x2="790.04" y2="288" stroke="#FF5A1F" stroke-width="2"/>
+  <text x="64" y="150" fill="#F7F4EE" font-size="36" font-family="ui-sans-serif, system-ui, sans-serif" letter-spacing="4">IRONCURTAIN</text>
+  <text x="64" y="190" fill="#8B94A7" font-size="14" font-family="ui-monospace, monospace">OPENRA · MCP · PUBLIC · 28.3912° N, 80.5960° W</text>
+</svg>
