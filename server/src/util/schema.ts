@@ -3,79 +3,88 @@
  *
  * MCP expects JSON Schema for inputSchema. Zod provides a runtime-validated
  * superset. This bridge produces a clean JSON Schema object from a Zod schema.
+ *
+ * Written against Zod 4 internals (`schema._zod.def.type`, `schema.description`).
+ * It deliberately mirrors the output of the previous Zod 3 converter so the
+ * MCP tool schemas stay byte-for-byte identical (z.toJSONSchema would add
+ * `$schema`, `additionalProperties: false`, `prefixItems`, defaults, etc.).
  */
 
-import type { ZodType, ZodObject, ZodRawShape } from "zod";
+import type { ZodType } from "zod";
+
+type Def = Record<string, unknown> & { type: string };
+
+function defOf(schema: ZodType): Def {
+  return (schema as unknown as { _zod: { def: Def } })._zod.def;
+}
 
 /**
  * Convert a Zod schema to a plain JSON Schema object suitable for MCP tool registration.
  *
  * This is a lightweight converter that handles the shapes we actually use.
- * For full fidelity, consider zod-to-json-schema, but we avoid the extra dependency.
  */
 export function zodToJsonSchema(schema: ZodType): Record<string, unknown> {
   return zodTypeToJson(schema);
 }
 
 function zodTypeToJson(schema: ZodType): Record<string, unknown> {
-  const def = (schema as unknown as { _def: Record<string, unknown> })._def;
-  const typeName = def.typeName as string;
+  const def = defOf(schema);
 
-  switch (typeName) {
-    case "ZodObject":
-      return zodObjectToJson(schema as ZodObject<ZodRawShape>);
-    case "ZodString":
-      return withDescription(def, { type: "string" });
-    case "ZodNumber":
-      return withDescription(def, { type: "number" });
-    case "ZodBoolean":
-      return withDescription(def, { type: "boolean" });
-    case "ZodArray":
-      return withDescription(def, {
+  switch (def.type) {
+    case "object":
+      return zodObjectToJson(schema);
+    case "string":
+      return withDescription(schema, { type: "string" });
+    case "number":
+      return withDescription(schema, { type: "number" });
+    case "boolean":
+      return withDescription(schema, { type: "boolean" });
+    case "array":
+      return withDescription(schema, {
         type: "array",
-        items: zodTypeToJson(def.type as ZodType),
+        items: zodTypeToJson(def.element as ZodType),
       });
-    case "ZodEnum":
-      return withDescription(def, {
+    case "enum":
+      return withDescription(schema, {
         type: "string",
-        enum: (def as { values: string[] }).values,
+        enum: Object.values(def.entries as Record<string, string>),
       });
-    case "ZodOptional":
+    case "optional":
+    case "default":
       return zodTypeToJson(def.innerType as ZodType);
-    case "ZodDefault":
-      return zodTypeToJson(def.innerType as ZodType);
-    case "ZodNullable": {
+    case "nullable": {
       const inner = zodTypeToJson(def.innerType as ZodType);
       return { ...inner, nullable: true };
     }
-    case "ZodLiteral":
-      return withDescription(def, { type: typeof def.value, const: def.value });
-    case "ZodRecord":
-      return withDescription(def, {
+    case "literal": {
+      const value = (def.values as unknown[])[0];
+      return withDescription(schema, { type: typeof value, const: value });
+    }
+    case "record":
+      return withDescription(schema, {
         type: "object",
         additionalProperties: zodTypeToJson(def.valueType as ZodType),
       });
-    case "ZodTuple": {
+    case "tuple": {
       const items = (def.items as ZodType[]).map(zodTypeToJson);
-      return withDescription(def, { type: "array", items, minItems: items.length, maxItems: items.length });
+      return withDescription(schema, { type: "array", items, minItems: items.length, maxItems: items.length });
     }
     default:
       return { type: "object" };
   }
 }
 
-function zodObjectToJson(schema: ZodObject<ZodRawShape>): Record<string, unknown> {
-  const shape = schema.shape;
+function zodObjectToJson(schema: ZodType): Record<string, unknown> {
+  const shape = defOf(schema).shape as Record<string, ZodType>;
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
 
   for (const [key, value] of Object.entries(shape)) {
-    const fieldDef = (value as { _def: Record<string, unknown> })._def;
-    properties[key] = zodTypeToJson(value as ZodType);
+    properties[key] = zodTypeToJson(value);
 
-    // A field is required unless it's ZodOptional or ZodDefault
-    const fieldTypeName = fieldDef.typeName as string;
-    if (fieldTypeName !== "ZodOptional" && fieldTypeName !== "ZodDefault") {
+    // A field is required unless it's optional or has a default
+    const fieldType = defOf(value).type;
+    if (fieldType !== "optional" && fieldType !== "default") {
       required.push(key);
     }
   }
@@ -89,20 +98,16 @@ function zodObjectToJson(schema: ZodObject<ZodRawShape>): Record<string, unknown
     result.required = required;
   }
 
-  const def = (schema as unknown as { _def: Record<string, unknown> })._def;
-  if (def.description) {
-    result.description = def.description;
+  if (schema.description) {
+    result.description = schema.description;
   }
 
   return result;
 }
 
-function withDescription(
-  def: Record<string, unknown>,
-  schema: Record<string, unknown>
-): Record<string, unknown> {
-  if (def.description) {
-    return { ...schema, description: def.description as string };
+function withDescription(schema: ZodType, json: Record<string, unknown>): Record<string, unknown> {
+  if (schema.description) {
+    return { ...json, description: schema.description };
   }
-  return schema;
+  return json;
 }
